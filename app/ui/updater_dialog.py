@@ -10,7 +10,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Qt, QThread, Signal
+from PySide6.QtCore import QEvent, QObject, QSize, Qt, QThread, Signal
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QDialog,
@@ -21,7 +21,10 @@ from PySide6.QtWidgets import (
     QPushButton,
     QToolButton,
     QVBoxLayout,
+    QStyle,
 )
+
+from app.ui.icon_utils import tinted_theme_icon
 
 
 def _project_root() -> Path:
@@ -401,22 +404,30 @@ class BinaryUpdaterWorker(QObject):
 
 
 class UpdaterDialog(QDialog):
+    _DIALOG_WIDTH = 640
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Обновлятор")
-        self.setMinimumSize(540, 170)
+        self.setMinimumWidth(self._DIALOG_WIDTH)
 
         self._root_dir = _project_root()
         self._thread: QThread | None = None
         self._worker: BinaryUpdaterWorker | None = None
 
         root = QVBoxLayout(self)
+        root.setContentsMargins(12, 12, 12, 12)
+        root.setSpacing(10)
+
+        self._title_label = QLabel("Обновление компонентов")
+        self._title_label.setStyleSheet("font-size: 16px; font-weight: 600;")
+        root.addWidget(self._title_label)
 
         os_label = platform.system() or "Unknown OS"
         self._info_label = QLabel(
-            f"Компоненты: yt-dlp, yt-dlp-ejs (static), ffmpeg/ffprobe, certifi | ОС: {os_label}"
+            f"yt-dlp, yt-dlp-ejs (static), ffmpeg/ffprobe, certifi | ОС: {os_label}"
         )
-        self._info_label.setWordWrap(True)
+        self._info_label.setWordWrap(False)
         root.addWidget(self._info_label)
 
         self._progress = QProgressBar()
@@ -428,7 +439,6 @@ class UpdaterDialog(QDialog):
         self._log_toggle_btn.setCheckable(True)
         self._log_toggle_btn.setChecked(False)
         self._log_toggle_btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        self._log_toggle_btn.setStyleSheet("QToolButton { padding: 0px; margin: 0px; }")
         self._log_toggle_btn.toggled.connect(self._toggle_log_panel)
 
         self._update_btn = QPushButton("Обновить")
@@ -448,9 +458,15 @@ class UpdaterDialog(QDialog):
         self._log = QPlainTextEdit()
         self._log.setReadOnly(True)
         self._log.setMaximumBlockCount(400)
+        log_size_policy = self._log.sizePolicy()
+        log_size_policy.setRetainSizeWhenHidden(False)
+        self._log.setSizePolicy(log_size_policy)
         self._set_log_constraints(False)
         self._update_log_toggle_ui(False)
+        self._lock_log_toggle_width()
         root.addWidget(self._log, 1)
+        self._fit_dialog_height_to_content()
+        self._update_button_icons()
 
     def _start_update(self) -> None:
         if self._thread is not None:
@@ -502,13 +518,36 @@ class UpdaterDialog(QDialog):
     def _toggle_log_panel(self, expanded: bool) -> None:
         self._set_log_constraints(expanded)
         self._update_log_toggle_ui(expanded)
-        self.adjustSize()
+        self._fit_dialog_height_to_content()
 
     def _set_log_expanded(self, expanded: bool) -> None:
         if self._log_toggle_btn.isChecked() != expanded:
             self._log_toggle_btn.setChecked(expanded)
             return
         self._toggle_log_panel(expanded)
+
+    def _update_log_toggle_ui(self, expanded: bool) -> None:
+        self._log_toggle_btn.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
+        self._log_toggle_btn.setText("Скрыть лог" if expanded else "Показать лог")
+
+    def _lock_log_toggle_width(self) -> None:
+        current = self._log_toggle_btn.isChecked()
+        widths: list[int] = []
+        for expanded in (False, True):
+            self._update_log_toggle_ui(expanded)
+            widths.append(self._log_toggle_btn.sizeHint().width())
+        self._log_toggle_btn.setFixedWidth(max(widths))
+        self._update_log_toggle_ui(current)
+
+    def _fit_dialog_height_to_content(self) -> None:
+        layout = self.layout()
+        if layout is not None:
+            layout.activate()
+
+        target_height = self.sizeHint().height()
+        self.setMinimumHeight(target_height)
+        self.setMaximumHeight(target_height)
+        self.resize(max(self.width(), self._DIALOG_WIDTH), target_height)
 
     def _set_log_constraints(self, expanded: bool) -> None:
         if expanded:
@@ -520,9 +559,35 @@ class UpdaterDialog(QDialog):
         self._log.setMaximumHeight(0)
         self._log.setVisible(False)
 
-    def _update_log_toggle_ui(self, expanded: bool) -> None:
-        self._log_toggle_btn.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
-        self._log_toggle_btn.setText("Скрыть лог" if expanded else "Показать лог")
+    def _update_button_icons(self) -> None:
+        icon_size = QSize(16, 16)
+        self._update_btn.setIcon(
+            tinted_theme_icon(
+                self,
+                "view-refresh-symbolic",
+                QStyle.StandardPixmap.SP_BrowserReload,
+                icon_size,
+            )
+        )
+        self._close_btn.setIcon(
+            tinted_theme_icon(
+                self,
+                "window-close-symbolic",
+                QStyle.StandardPixmap.SP_DialogCloseButton,
+                icon_size,
+            )
+        )
+        self._update_btn.setIconSize(icon_size)
+        self._close_btn.setIconSize(icon_size)
+
+    def changeEvent(self, event) -> None:
+        if event.type() in {
+            QEvent.Type.PaletteChange,
+            QEvent.Type.ApplicationPaletteChange,
+            QEvent.Type.StyleChange,
+        }:
+            self._update_button_icons()
+        super().changeEvent(event)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if self._thread is not None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from PySide6.QtCore import QRectF, QSettings, Qt, QThread, QTimer
+from PySide6.QtCore import QEvent, QRectF, QSettings, QSize, Qt, QThread, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QPainter, QPainterPath, QPen, QPixmap, QPalette
 from PySide6.QtWidgets import (
     QApplication,
@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QMenu,
     QSystemTrayIcon,
+    QStyle,
 )
 
 from app.core.downloader import DownloadRequest, DownloadWorker
@@ -55,6 +56,7 @@ from app.core.settings import (
 )
 from app.ui.about_dialog import AboutDialog
 from app.ui.cookies_dialog import CookiesDialog
+from app.ui.icon_utils import tinted_theme_icon
 from app.ui.proxy_dialog import ProxyDialog
 from app.ui.settings_dialog import SettingsDialog
 from app.ui.updater_dialog import UpdaterDialog
@@ -285,6 +287,7 @@ class MainWindow(QMainWindow):
         self._set_log_constraints(False)
         self._update_log_toggle_ui(False)
         self._lock_log_toggle_width()
+        self._update_action_and_button_icons()
 
         self.preview_image = RoundedPreviewLabel(PREVIEW_CORNER_RADIUS, PREVIEW_BORDER_WIDTH)
         self.preview_image.setText(self.tr("Preview will be available after analysis"))
@@ -827,8 +830,51 @@ class MainWindow(QMainWindow):
             style.unpolish(widget)
             style.polish(widget)
             widget.update()
+        if hasattr(self, "analyze_btn"):
+            self._update_action_and_button_icons()
+            QTimer.singleShot(0, self._update_action_and_button_icons)
         self._refresh_lineedit_placeholders()
         QTimer.singleShot(0, self._refresh_lineedit_placeholders)
+
+    def _update_action_and_button_icons(self) -> None:
+        icon_size = QSize(16, 16)
+        self.analyze_btn.setIcon(
+            tinted_theme_icon(
+                self,
+                "view-refresh-symbolic",
+                QStyle.StandardPixmap.SP_BrowserReload,
+                icon_size,
+            )
+        )
+        self.path_browse_btn.setIcon(
+            tinted_theme_icon(
+                self,
+                "document-open-symbolic",
+                QStyle.StandardPixmap.SP_DialogOpenButton,
+                icon_size,
+            )
+        )
+        self.download_btn.setIcon(
+            tinted_theme_icon(
+                self,
+                "go-down-symbolic",
+                QStyle.StandardPixmap.SP_ArrowDown,
+                icon_size,
+            )
+        )
+        self.analyze_btn.setIconSize(icon_size)
+        self.path_browse_btn.setIconSize(icon_size)
+        self.download_btn.setIconSize(icon_size)
+
+    def changeEvent(self, event) -> None:
+        if event.type() in {
+            QEvent.Type.PaletteChange,
+            QEvent.Type.ApplicationPaletteChange,
+            QEvent.Type.StyleChange,
+        }:
+            if hasattr(self, "analyze_btn"):
+                self._update_action_and_button_icons()
+        super().changeEvent(event)
 
     def _refresh_lineedit_placeholders(self) -> None:
         app = QApplication.instance()

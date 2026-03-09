@@ -4,7 +4,7 @@ import subprocess
 import sys
 from importlib import metadata
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, QSize, Qt
 from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QDialog,
@@ -15,10 +15,12 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QVBoxLayout,
     QWidget,
+    QStyle,
 )
 
 from app.core.ca import get_ca_bundle_info
 from app.core.ffmpeg import resolve_ffmpeg_path
+from app.ui.icon_utils import tinted_theme_icon
 
 APP_NAME = "yt-dlpMaster"
 APP_VERSION = "0.1.0"
@@ -237,10 +239,11 @@ class AboutDialog(QDialog):
         tabs.addTab(self._build_license_tab(), self.tr("License"))
         root.addWidget(tabs)
 
-        close_btn = QPushButton(self.tr("Close"))
-        close_btn.clicked.connect(self.accept)
-        root.addWidget(close_btn, 0, Qt.AlignRight)
+        self._close_btn = QPushButton(self.tr("Close"))
+        self._close_btn.clicked.connect(self.accept)
+        root.addWidget(self._close_btn, 0, Qt.AlignRight)
         self.setFixedHeight(self.sizeHint().height())
+        self._update_button_icons()
 
     def _build_components_tab(self) -> QWidget:
         widget = QWidget()
@@ -352,3 +355,24 @@ class AboutDialog(QDialog):
         if len(tokens) >= 3:
             return tokens[2]
         return "unknown"
+
+    def _update_button_icons(self) -> None:
+        icon_size = QSize(16, 16)
+        self._close_btn.setIcon(
+            tinted_theme_icon(
+                self,
+                "window-close-symbolic",
+                QStyle.StandardPixmap.SP_DialogCloseButton,
+                icon_size,
+            )
+        )
+        self._close_btn.setIconSize(icon_size)
+
+    def changeEvent(self, event) -> None:
+        if event.type() in {
+            QEvent.Type.PaletteChange,
+            QEvent.Type.ApplicationPaletteChange,
+            QEvent.Type.StyleChange,
+        }:
+            self._update_button_icons()
+        super().changeEvent(event)

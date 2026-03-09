@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from PySide6.QtCore import QEvent, QSize
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -10,9 +11,11 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QVBoxLayout,
     QPushButton,
+    QStyle,
 )
 
 from app.core.settings import PROXY_SCHEMES, ProxySettings
+from app.ui.icon_utils import tinted_theme_icon
 
 
 class ProxyDialog(QDialog):
@@ -46,13 +49,13 @@ class ProxyDialog(QDialog):
         form.addRow(self.tr("Password:"), self.password_input)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        save_btn = buttons.button(QDialogButtonBox.Save)
-        cancel_btn = buttons.button(QDialogButtonBox.Cancel)
-        if save_btn is not None:
-            save_btn.setText(self.tr("Save"))
-        if cancel_btn is not None:
-            cancel_btn.setText(self.tr("Cancel"))
-        self._normalize_button_widths([save_btn, cancel_btn])
+        self._save_btn = buttons.button(QDialogButtonBox.Save)
+        self._cancel_btn = buttons.button(QDialogButtonBox.Cancel)
+        if self._save_btn is not None:
+            self._save_btn.setText(self.tr("Save"))
+        if self._cancel_btn is not None:
+            self._cancel_btn.setText(self.tr("Cancel"))
+        self._normalize_button_widths([self._save_btn, self._cancel_btn])
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 
@@ -61,6 +64,7 @@ class ProxyDialog(QDialog):
         layout.addWidget(buttons)
         self.setMinimumWidth(460)
         self.setFixedHeight(self.sizeHint().height())
+        self._update_button_icons()
 
         self.enabled_checkbox.toggled.connect(self._update_enabled_state)
         self._update_enabled_state(self.enabled_checkbox.isChecked())
@@ -90,3 +94,35 @@ class ProxyDialog(QDialog):
         self.port_input.setEnabled(enabled)
         self.username_input.setEnabled(enabled)
         self.password_input.setEnabled(enabled)
+
+    def _update_button_icons(self) -> None:
+        icon_size = QSize(16, 16)
+        if self._save_btn is not None:
+            self._save_btn.setIcon(
+                tinted_theme_icon(
+                    self,
+                    "document-save-symbolic",
+                    QStyle.StandardPixmap.SP_DialogSaveButton,
+                    icon_size,
+                )
+            )
+            self._save_btn.setIconSize(icon_size)
+        if self._cancel_btn is not None:
+            self._cancel_btn.setIcon(
+                tinted_theme_icon(
+                    self,
+                    "dialog-cancel-symbolic",
+                    QStyle.StandardPixmap.SP_DialogCancelButton,
+                    icon_size,
+                )
+            )
+            self._cancel_btn.setIconSize(icon_size)
+
+    def changeEvent(self, event) -> None:
+        if event.type() in {
+            QEvent.Type.PaletteChange,
+            QEvent.Type.ApplicationPaletteChange,
+            QEvent.Type.StyleChange,
+        }:
+            self._update_button_icons()
+        super().changeEvent(event)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, QSize, Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -13,12 +13,14 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QStyle,
     QVBoxLayout,
 )
 from yt_dlp import YoutubeDL
 
 from app.core.ca import ensure_windows_ca_bundle
 from app.core.settings import CookiesSettings, autodetect_browser_profiles
+from app.ui.icon_utils import tinted_theme_icon
 
 
 BROWSER_OPTIONS = ["firefox", "chrome", "chromium", "edge", "opera", "brave", "safari"]
@@ -67,12 +69,12 @@ class CookiesDialog(QDialog):
         form.addRow(self.tr("Cookies file:"), file_row)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        save_btn = buttons.button(QDialogButtonBox.Save)
-        cancel_btn = buttons.button(QDialogButtonBox.Cancel)
-        if save_btn is not None:
-            save_btn.setText(self.tr("Save"))
-        if cancel_btn is not None:
-            cancel_btn.setText(self.tr("Cancel"))
+        self._save_btn = buttons.button(QDialogButtonBox.Save)
+        self._cancel_btn = buttons.button(QDialogButtonBox.Cancel)
+        if self._save_btn is not None:
+            self._save_btn.setText(self.tr("Save"))
+        if self._cancel_btn is not None:
+            self._cancel_btn.setText(self.tr("Cancel"))
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         self.test_btn = QPushButton(self.tr("Test cookies"))
@@ -89,7 +91,7 @@ class CookiesDialog(QDialog):
         layout.addLayout(form)
         layout.addLayout(test_row)
         layout.addWidget(buttons)
-        self._normalize_button_widths([self.detect_btn, self.file_btn, self.test_btn, save_btn, cancel_btn])
+        self._normalize_button_widths([self.detect_btn, self.file_btn, self.test_btn, self._save_btn, self._cancel_btn])
 
         self.mode_combo.currentIndexChanged.connect(self._update_enabled_state)
         self.browser_combo.currentIndexChanged.connect(self._detect_profiles)
@@ -101,6 +103,7 @@ class CookiesDialog(QDialog):
         self._detect_profiles()
         self.profile_combo.setEditText(current.browser_profile)
         self._update_enabled_state()
+        self._update_button_icons()
 
     @staticmethod
     def _normalize_button_widths(buttons: list[QPushButton | None]) -> None:
@@ -166,6 +169,66 @@ class CookiesDialog(QDialog):
             QMessageBox.information(self, self.tr("Cookies"), self.tr("Cookies source is available."))
             return
         QMessageBox.critical(self, self.tr("Cookies test failed"), result)
+
+    def _update_button_icons(self) -> None:
+        icon_size = QSize(16, 16)
+        self.detect_btn.setIcon(
+            tinted_theme_icon(
+                self,
+                "view-refresh-symbolic",
+                QStyle.StandardPixmap.SP_BrowserReload,
+                icon_size,
+            )
+        )
+        self.file_btn.setIcon(
+            tinted_theme_icon(
+                self,
+                "document-open-symbolic",
+                QStyle.StandardPixmap.SP_DialogOpenButton,
+                icon_size,
+            )
+        )
+        self.test_btn.setIcon(
+            tinted_theme_icon(
+                self,
+                "dialog-ok-apply-symbolic",
+                QStyle.StandardPixmap.SP_DialogApplyButton,
+                icon_size,
+            )
+        )
+        if self._save_btn is not None:
+            self._save_btn.setIcon(
+                tinted_theme_icon(
+                    self,
+                    "document-save-symbolic",
+                    QStyle.StandardPixmap.SP_DialogSaveButton,
+                    icon_size,
+                )
+            )
+            self._save_btn.setIconSize(icon_size)
+        if self._cancel_btn is not None:
+            self._cancel_btn.setIcon(
+                tinted_theme_icon(
+                    self,
+                    "dialog-cancel-symbolic",
+                    QStyle.StandardPixmap.SP_DialogCancelButton,
+                    icon_size,
+                )
+            )
+            self._cancel_btn.setIconSize(icon_size)
+        self.detect_btn.setIconSize(icon_size)
+        self.file_btn.setIconSize(icon_size)
+        self.test_btn.setIconSize(icon_size)
+        self._normalize_button_widths([self.detect_btn, self.file_btn, self.test_btn, self._save_btn, self._cancel_btn])
+
+    def changeEvent(self, event) -> None:
+        if event.type() in {
+            QEvent.Type.PaletteChange,
+            QEvent.Type.ApplicationPaletteChange,
+            QEvent.Type.StyleChange,
+        }:
+            self._update_button_icons()
+        super().changeEvent(event)
 
 
 def _test_cookies_source(cookies: CookiesSettings, url: str) -> str | None:
